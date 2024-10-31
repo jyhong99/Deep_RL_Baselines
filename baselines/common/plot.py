@@ -29,7 +29,7 @@ def plot_train_result(project_name, epoch_logger, window=50, show_graphs=True):
     if 'timesteps' in clean_df.columns and 'mean_ep_ret' in clean_df.columns:
         cumulative_mean = clean_df['mean_ep_ret'].expanding().mean()
         axs[1, 0].plot(clean_df['timesteps'], cumulative_mean, 'g-')
-        axs[1, 0].set_title("Cumulative Mean Episode Return")
+        axs[1, 0].set_title("Cumulative Mean Episode Return over Timesteps")
         axs[1, 0].set_xlabel("Timesteps")
         axs[1, 0].set_ylabel("Cumulative Mean Return")
         axs[1, 0].grid(axis='y')
@@ -42,7 +42,7 @@ def plot_train_result(project_name, epoch_logger, window=50, show_graphs=True):
 
         axs[1, 1].plot(steps, mean_ep_ret, 'y-')
         axs[1, 1].fill_between(steps, mean_ep_ret - std_ep_ret, mean_ep_ret + std_ep_ret, color='y', alpha=0.1)
-        axs[1, 1].set_title(f"Rolling Mean and Std of Return (Window={window})")
+        axs[1, 1].set_title(f"Rolling Mean and Std of Return (Window={window}) over Timesteps")
         axs[1, 1].set_xlabel("Timesteps")
         axs[1, 1].set_ylabel("Average Return")
         axs[1, 1].grid(axis='y')

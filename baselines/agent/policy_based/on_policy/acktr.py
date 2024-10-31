@@ -12,6 +12,7 @@ class ACKTR(OnPolicyAlgorithm):
             critic_size=config.get('critic_size', (64, 64)),
             actor_activation=config.get('actor_activation', torch.tanh),
             critic_activation=config.get('critic_activation', torch.tanh),
+            buffer_size=config.get('buffer_size', int(1e+6)),
             update_after=config.get('update_after', 128),
             actor_lr=config.get('step_size', 3e-4),
             critic_lr=None,

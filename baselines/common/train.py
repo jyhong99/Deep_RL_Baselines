@@ -1,7 +1,6 @@
 import os, gym, time, pickle, random, datetime
-import numpy as np
+import torch, numpy as np
 import ray, ray.exceptions
-import torch
 from tqdm import tqdm
 from copy import deepcopy
 from ray.util.queue import Queue
@@ -31,7 +30,16 @@ def get_next_step(env, action):
     return next_state, reward, terminated, info
 
 
-def evaluate(env, agent, seed, eval_iters):
+def evaluate(env, agent, seed, eval_iters, normalized_env=False):
+    if normalized_env:
+        env = NormalizedEnv(
+            env=env, 
+            obs_norm=True, 
+            ret_norm=False,
+            gamma=agent.gamma, 
+            epsilon=agent.epsilon
+            ) 
+        
     total_ep_ret, total_ep_len = [], []
 
     for _ in tqdm(range(eval_iters), desc='EVALUATION'):
@@ -51,6 +59,10 @@ def evaluate(env, agent, seed, eval_iters):
         total_ep_len.append(ep_len)
 
     return total_ep_ret, total_ep_len
+
+
+
+
 
 
 
@@ -119,7 +131,13 @@ class Trainer:
             self.agent.load(load_path)
 
         if normalized_env:
-            self.train_env = NormalizedEnv(self.train_env) 
+            self.train_env = NormalizedEnv(
+                env=self.train_env, 
+                obs_norm=True, 
+                ret_norm=False,
+                gamma=self.agent.gamma, 
+                epsilon=self.agent.epsilon
+                ) 
 
         global_stats = {
             'max_ret': -np.inf,
@@ -155,7 +173,8 @@ class Trainer:
 
             if timesteps % self.eval_intervals == 0:
                 if self.eval_mode == True:
-                    total_ep_ret, total_ep_len = evaluate(self.eval_env, self.agent, self.seed, self.eval_iters)
+                    total_ep_ret, total_ep_len = evaluate(
+                        self.eval_env, self.agent, self.seed, self.eval_iters, self.normalized_env)
                 
                 if total_ep_ret != [] and total_ep_len != []:
                     max_ep_ret = np.max(total_ep_ret)
@@ -242,6 +261,10 @@ class Trainer:
 
 
 
+
+
+
+
 class DistributedTrainer:
     def __init__(self, env, eval_env, agent, seed):
         self.train_env = env
@@ -274,18 +297,17 @@ class DistributedTrainer:
         self.train_logger = []
         self.start_time = time.time()
         self.start_time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.state_dim = self.train_env.observation_space.shape[0]
+        if isinstance(self.train_env.action_space, gym.spaces.Box):
+            self.action_type = 'continuous'
+            self.action_dim = self.train_env.action_space.shape[0]
+        else:
+            self.action_type = 'discrete'
+            self.action_dim = self.train_env.action_space.n
 
         if self.policy_type == 'off_policy':
-            self.state_dim = self.train_env.observation_space.shape[0]
-            if isinstance(self.train_env.action_space, gym.spaces.Box):
-                self.action_type = 'continuous'
-                self.action_dim = self.train_env.action_space.shape[0]
-            else:
-                self.action_type = 'discrete'
-                self.action_dim = self.train_env.action_space.n
-
             self.prioritized_mode = self.learner.prioritized_mode
-            self.buffer_size = self.learner.buffer_size
             self.batch_size = self.learner.batch_size            
             self.prio_alpha = self.learner.prio_alpha
             self.prio_beta = self.learner.prio_beta 
@@ -333,29 +355,47 @@ class DistributedTrainer:
 
         if load_path:
             self.learner.load(load_path)
-
+            
         ray.init()    
         try:
             lock_queue = Queue(maxsize=self.n_runners)
             lock_queue.put("lock")
 
+            self.buffer_size = self.learner.buffer_size
+            self.reward_norm = self.learner.reward_norm
+            self.epsilon = 1e-8
+        
             if self.policy_type == 'on_policy':
-                buffer = SharedRolloutBuffer.remote(self.device)
+                buffer = SharedRolloutBuffer.remote(
+                    state_dim=self.state_dim, 
+                    action_dim=self.action_dim, 
+                    buffer_size=self.buffer_size, 
+                    device=self.device, 
+                    reward_norm=self.reward_norm, 
+                    epsilon=self.epsilon
+                    )
+                
             elif self.policy_type == 'off_policy':
                 if self.prioritized_mode:
                     buffer = SharedPrioritizedReplayBuffer.remote(
-                        self.state_dim, 
-                        self.action_dim, 
-                        self.buffer_size, 
-                        self.device, 
-                        self.prio_alpha
+                        state_dim=self.state_dim, 
+                        action_dim=self.action_dim, 
+                        buffer_size=self.buffer_size, 
+                        batch_size=self.batch_size,
+                        device=self.device, 
+                        alpha=self.prio_alpha,
+                        reward_norm=self.reward_norm, 
+                        epsilon=self.epsilon
                         )
                 else:
                     buffer = SharedReplayBuffer.remote(
-                        self.state_dim, 
-                        self.action_dim, 
-                        self.buffer_size, 
-                        self.device
+                        state_dim=self.state_dim, 
+                        action_dim=self.action_dim, 
+                        buffer_size=self.buffer_size, 
+                        batch_size=self.batch_size,
+                        device=self.device, 
+                        reward_norm=self.reward_norm, 
+                        epsilon=self.epsilon
                         )
 
             runners = [
@@ -402,12 +442,12 @@ class DistributedTrainer:
                     print(f'RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}')
 
                 eval_counter += train_iters
-                buffer_size = ray.get(buffer.get_size.remote())
+                buffer_size = ray.get(buffer.size.remote())
                 if buffer_size >= self.learner.update_after:
                     print('\n===================== LEARNER STARTS TRAININGS ====================\n') 
                     result = None
                     if self.policy_type == 'on_policy':
-                        states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote(self.learner.reward_norm))
+                        states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote())
                         result = self.learner.learn(states, actions, rewards, next_states, dones)
 
                         if result is not None:
@@ -419,7 +459,7 @@ class DistributedTrainer:
                                 fraction = min((timesteps + t) / max_iters, 1.)
                                 self.prio_beta = self.prio_beta + fraction * (1. - self.prio_beta)
 
-                                states, actions, rewards, next_states, dones, weights, idxs = ray.get(buffer.sample.remote(self.batch_size, self.prio_beta, self.learner.reward_norm))
+                                states, actions, rewards, next_states, dones, weights, idxs = ray.get(buffer.sample.remote(self.prio_beta))
                                 result = self.learner.learn(states, actions, rewards, next_states, dones, weights)
 
                                 if result['td_error'] is not None:
@@ -427,7 +467,7 @@ class DistributedTrainer:
                                     new_prios = td_error + self.prio_eps
                                     buffer.update_priorities.remote(idxs, new_prios)
                             else:
-                                states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote(self.batch_size, self.learner.reward_norm))
+                                states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote())
                                 result = self.learner.learn(states, actions, rewards, next_states, dones)
                             
                             if result is not None:
@@ -439,7 +479,8 @@ class DistributedTrainer:
                 if eval_counter >= self.eval_intervals:
                     eval_counter -= self.eval_intervals
                     if self.eval_mode == True:
-                        total_ep_ret, total_ep_len = evaluate(self.eval_env, self.learner, self.seed, self.eval_iters)
+                        total_ep_ret, total_ep_len = evaluate(
+                            self.eval_env, self.learner, self.seed, self.eval_iters, self.normalized_env)
 
                     if total_ep_ret != [] and total_ep_len != []:
                         max_ep_ret = np.max(total_ep_ret)
@@ -532,7 +573,13 @@ class Runner:
         self.name = name
         self.env = deepcopy(env)
         if normalized_env:
-            self.env = NormalizedEnv(self.env)
+            self.env = NormalizedEnv(
+                env=self.env,
+                obs_norm=True, 
+                ret_norm=False,
+                gamma=learner.gamma, 
+                epsilon=learner.epsilon
+                ) 
 
         self.runner = deepcopy(learner)
         self.seed = seed + 100 * name
@@ -551,11 +598,11 @@ class Runner:
 
         while timesteps < runner_iters:
             if self.policy_type == 'on_policy':
-                buffer_size = ray.get(buffer.get_size.remote())
+                buffer_size = ray.get(buffer.size.remote())
                 if buffer_size >= self.runner.update_after:
                     break
             elif self.policy_type == 'off_policy':
-                buffer_size = ray.get(buffer.get_size.remote())
+                buffer_size = ray.get(buffer.size.remote())
                 if buffer_size >= self.max_iters:
                     break
 

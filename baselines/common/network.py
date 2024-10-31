@@ -296,7 +296,7 @@ class MLPQuantileQFunction(nn.Module):
 
 
 
-
+    
 class MLPQNetwork(MLPBase):
     def __init__(self, state_dim, action_dim, hidden_sizes=(64, 64), activation=nn.ReLU, dueling_mode=False):
         super(MLPQNetwork, self).__init__(state_dim, hidden_sizes, activation)

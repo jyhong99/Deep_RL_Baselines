@@ -52,7 +52,7 @@ class QRDQN(OffPolicyAlgorithm):
 
     @torch.no_grad()
     def act(self, state, training=True):
-        if (self.buffer.size < self.update_after) and training:
+        if (self.buffer.ptr < self.update_after) and training:
             self.random_action()
 
         if self.eps_threshold > self.eps_min:

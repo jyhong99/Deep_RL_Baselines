@@ -43,13 +43,16 @@ class RunningMeanStd:
 
         
 class NormalizedEnv(gym.core.Wrapper):
-    def __init__(self, env, epsilon=1e-8):
+    def __init__(self, env, obs_norm=True, ret_norm=True, gamma=0.99, epsilon=1e-8):
         super(NormalizedEnv, self).__init__(env)
         self.env = env
         self.observation_space = env.observation_space
         self.action_space = env.action_space
 
-        self.obs_rms = RunningMeanStd(shape=self.observation_space.shape)
+        self.obs_rms = RunningMeanStd(shape=self.observation_space.shape) if obs_norm else None
+        self.ret_rms = RunningMeanStd(shape=(1,)) if ret_norm else None
+        self.ret = np.zeros(())
+        self.gamma = gamma
         self.epsilon = epsilon
 
     def __str__(self):
@@ -57,9 +60,18 @@ class NormalizedEnv(gym.core.Wrapper):
     
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        return self._normalize_obs(obs), reward, done, info
+
+        obs = self._normalize_obs(obs)
+        if self.ret_rms:
+            self.ret = self.ret * self.gamma + reward
+            self.ret_rms.update(np.array([self.ret].copy()))
+            reward = reward / np.sqrt(self.ret_rms.var + self.epsilon)
+            self.ret = self.ret * (1. - float(done))
+
+        return obs, reward, done, info
 
     def reset(self, seed=None):
+        self.ret = np.zeros(())
         obs = self.env.reset(seed=seed) if seed is not None else self.env.reset()
         return self._normalize_obs(obs)
 
@@ -70,5 +82,8 @@ class NormalizedEnv(gym.core.Wrapper):
         return self.env.close()
     
     def _normalize_obs(self, obs):
-        self.obs_rms.update(obs)
-        return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.epsilon)
+        if self.obs_rms:
+            self.obs_rms.update(obs)
+            return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.epsilon)
+        else:
+            return obs

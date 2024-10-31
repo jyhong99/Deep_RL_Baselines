@@ -202,7 +202,7 @@ class Worker(mp.Process):
             if done:
                 state = self.env.reset()
 
-            if self.buffer.size >= self.update_after:
+            if self.buffer.ptr >= self.update_after:
                 states, actions, rewards, next_states, dones = self.buffer.sample()
                 self.learn(states, actions, rewards, next_states, dones)
 

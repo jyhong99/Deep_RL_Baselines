@@ -14,6 +14,7 @@ class TRPO(OnPolicyAlgorithm):
             critic_size=config.get('critic_size', (64, 64)),
             actor_activation=config.get('actor_activation', torch.tanh),
             critic_activation=config.get('critic_activation', torch.tanh),
+            buffer_size=config.get('buffer_size', int(1e+6)),
             update_after=config.get('update_after', 2048),
             actor_lr=None,
             critic_lr=config.get('vf_step_size', 3e-4),
