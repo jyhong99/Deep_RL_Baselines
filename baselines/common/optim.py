@@ -7,11 +7,12 @@ from torch.nn import Linear, Conv2d
 # https://github.com/ikostrikov/pytorch-a3c/blob/master/my_optim.py
 class SharedAdam(optim.Adam):
     def __init__(self,
-                 params,
-                 lr=1e-3,
-                 betas=(0.9, 0.999),
-                 eps=1e-8,
-                 weight_decay=0):
+            params,
+            lr=1e-3,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            weight_decay=0
+        ):
         super(SharedAdam, self).__init__(params, lr, betas, eps, weight_decay)
 
         for group in self.param_groups:
@@ -66,19 +67,19 @@ class SharedAdam(optim.Adam):
 # https://github.com/alirezakazemipour/ACKTR-PyTorch/blob/main/brain/kfac.py
 class KFAC_optim(optim.Optimizer):
     def __init__(self,
-                 model: torch.nn.Module,
-                 lr=0.25,
-                 weight_decay=0,
-                 damping=1e-2,
-                 momentum=0.9,
-                 eps=0.95,
-                 Ts=1,
-                 Tf=10,
-                 max_lr=1,
-                 trust_region=0.002
-                 ):
-
+            model: torch.nn.Module,
+            lr=0.25,
+            weight_decay=0,
+            damping=1e-2,
+            momentum=0.9,
+            eps=0.95,
+            Ts=1,
+            Tf=10,
+            max_lr=1,
+            trust_region=0.002
+        ):
         super(KFAC_optim, self).__init__(model.parameters(), {})
+
         self.acceptable_layer_types = [Linear, Conv2d]
         self.model = model
         self.lr = lr
@@ -228,11 +229,13 @@ class KFAC_optim(optim.Optimizer):
             self._Q_a[l] = q_a
             self._Q_g[l] = q_g
 
-def img2col(tensor,
-            kernel_size: tuple,
-            stride: tuple,
-            padding: tuple
-            ):
+def img2col(
+        tensor,
+        kernel_size: tuple,
+        stride: tuple,
+        padding: tuple
+    ):
+    
     x = tensor.data
     if padding[0] + padding[1] > 0:
         x = F.pad(x, (padding[1], padding[1],

@@ -3,10 +3,16 @@ import torch, torch.nn as nn, torch.nn.functional as F
 from torch.distributions import Normal, Categorical
 from baselines.common.operation import TanhBijector
 
-def weights_init_(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight, gain=1)
-        torch.nn.init.constant_(m.bias, 0)
+MIN_MEAN = -10.
+MAX_MEAN = 10.
+MIN_LOG_STD = -20.
+MAX_LOG_STD = 2.
+
+
+def weights_init_(module):
+    if isinstance(module, nn.Linear):
+        torch.nn.init.xavier_uniform_(module.weight, gain=1)
+        torch.nn.init.constant_(module.bias, 0)
 
 
 class MLPBase(nn.Module):
@@ -18,12 +24,6 @@ class MLPBase(nn.Module):
             self.hidden_layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]))
         self.activation = activation
     
-    def forward(self, state):
-        x = self.activation(self.input_layer(state))
-        for hidden_layer in self.hidden_layers:
-            x = self.activation(hidden_layer(x))
-        return x
-    
     def mlp(self, state):
         x = self.activation(self.input_layer(state))
         for hidden_layer in self.hidden_layers:
@@ -33,7 +33,7 @@ class MLPBase(nn.Module):
 
 # https://github.com/Kaixhin/Rainbow/blob/master/model.py
 class NoisyLinear(nn.Module):
-    def __init__(self, in_features: int, out_features: int, std_init: float = 0.5):
+    def __init__(self, in_features, out_features, std_init):
         super(NoisyLinear, self).__init__()
         
         self.in_features = in_features
@@ -65,7 +65,7 @@ class NoisyLinear(nn.Module):
         self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
         self.bias_epsilon.copy_(epsilon_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return F.linear(
             x,
             self.weight_mu + self.weight_sigma * self.weight_epsilon,
@@ -73,7 +73,7 @@ class NoisyLinear(nn.Module):
         )
     
     @staticmethod
-    def scale_noise(size: int) -> torch.Tensor:
+    def scale_noise(size):
         x = torch.randn(size)
         return x.sign().mul(x.abs().sqrt())
 
@@ -154,8 +154,8 @@ class MLPGaussianPolicy(MLPBase):
 
     def forward(self, state):
         x = self.mlp(state)
-        mu = self.mu_layer(x)
-        log_std = torch.tanh(self.log_std_layer(x))
+        mu = torch.clamp(self.mu_layer(x), MIN_MEAN, MAX_MEAN)
+        log_std = torch.clamp(self.log_std_layer(x), MIN_LOG_STD, MAX_LOG_STD)
         return mu, log_std.exp()
 
     def dist(self, state):
@@ -230,7 +230,7 @@ class MLPGaussianSDEPolicy(MLPBase):
     def _get_std(self, log_std):
         below_threshold = torch.exp(log_std) * (log_std <= 0)
         safe_log_std = log_std * (log_std > 0) + self.epsilon
-        above_threshold = (torch.log1p(safe_log_std) + 1.0) * (log_std > 0)
+        above_threshold = (torch.log1p(safe_log_std) + 1.) * (log_std > 0)
         return below_threshold + above_threshold
 
     def get_noise(self):
@@ -239,6 +239,12 @@ class MLPGaussianSDEPolicy(MLPBase):
 
     def reset_noise(self):
         self._sample_weights(self.log_std)
+
+
+
+
+
+
 
         
 class MLPVFunction(MLPBase):
@@ -318,6 +324,7 @@ class MLPQNetwork(MLPBase):
             output = self.output_layer(x)
         return output
 
+
 class MLPDoubleQNetwork(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_sizes=(64, 64), activation=nn.ReLU, dueling_mode=False):
         super(MLPDoubleQNetwork, self).__init__()
@@ -327,6 +334,7 @@ class MLPDoubleQNetwork(nn.Module):
 
     def forward(self, state):
         return self.q1(state), self.q2(state)
+
 
 class MLPQuantileQNetwork(MLPBase):
     def __init__(self, state_dim, action_dim, n_quantiles=200, hidden_sizes=(64, 64), activation=nn.ReLU, dueling_mode=False):
@@ -351,6 +359,7 @@ class MLPQuantileQNetwork(MLPBase):
             quantiles = self.output_quantile(x)
         return quantiles.view(-1, self.n_quantiles, self.action_dim)
     
+
 class MLPRainbowQNetwork(MLPNoisyBase):
     def __init__(self, state_dim, action_dim, atom_size, support, hidden_sizes=(64, 64), activation=nn.ReLU):
         super(MLPRainbowQNetwork, self).__init__(state_dim, hidden_sizes, activation)

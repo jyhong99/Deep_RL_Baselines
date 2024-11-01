@@ -431,7 +431,7 @@ class DistributedTrainer:
 
                 total_ep_ret, total_ep_len = [], []
                 for result in results:
-                    name, time_per_run, ep_per_run, ep_ret, ep_len = result
+                    name, time_per_run, ep_per_run, ep_ret, ep_len, elapse = result
 
                     num_eps += ep_per_run
                     train_iters += time_per_run   
@@ -439,7 +439,7 @@ class DistributedTrainer:
                     total_ep_ret += ep_ret
                     total_ep_len += ep_len
 
-                    print(f'RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}')
+                    print(f"RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}, ELAPSE: {elapse[1]}m {elapse[2]}s")
 
                 eval_counter += train_iters
                 buffer_size = ray.get(buffer.size.remote())
@@ -596,6 +596,7 @@ class Runner:
         ep_counter, timesteps = 0, 0
         total_ep_ret, total_ep_len = [], []
 
+        start_time = time.time()
         while timesteps < runner_iters:
             if self.policy_type == 'on_policy':
                 buffer_size = ray.get(buffer.size.remote())
@@ -623,7 +624,13 @@ class Runner:
                 total_ep_len.append(self.ep_len)
                 self.ep_ret, self.ep_len = 0, 0
 
-        return self.name, timesteps, ep_counter, total_ep_ret, total_ep_len
+        elapsed_time = datetime.timedelta(seconds=(time.time() - start_time))
+        total_seconds = int(elapsed_time.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        elapse = [hours, minutes, seconds]
+
+        return self.name, timesteps, ep_counter, total_ep_ret, total_ep_len, elapse
     
     def _sync_with_learner(self, max_retries=5):
         for _ in range(max_retries):

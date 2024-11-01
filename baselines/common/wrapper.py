@@ -3,7 +3,7 @@ import numpy as np
 
 
 #https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/running_mean_std.py
-class RunningMeanStd:
+class RunningMeanStd(object):
     def __init__(self, epsilon=1e-4, shape=()):
         self.mean = np.zeros(shape, np.float64)
         self.var = np.ones(shape, np.float64)

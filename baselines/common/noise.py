@@ -29,6 +29,7 @@ class OrnsteinUhlenbeckNoise:
         
     def sample(self):
         x = self.noise
-        dx = self.theta * (self.mu - x) * self.dt  + self.sigma * np.sqrt(self.dt) * torch.randn_like(x).to(self.device)
+        dx = self.theta * (self.mu - x) * self.dt + \
+             self.sigma * np.sqrt(self.dt) * torch.randn_like(x).to(self.device)
         self.noise = x + dx
         return self.noise
