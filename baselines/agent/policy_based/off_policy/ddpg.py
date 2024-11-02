@@ -10,8 +10,8 @@ class DDPG(OffPolicyAlgorithm):
     def __init__(self, env, **config):
         super().__init__(
             env=env,
-            actor_size=config.get('actor_sizes', (256, 256)),
-            critic_size=config.get('critic_sizes', (256, 256)),
+            actor_size=config.get('actor_size', (256, 256)),
+            critic_size=config.get('critic_size', (256, 256)),
             actor_activation=config.get('actor_activation', torch.relu),
             critic_activation=config.get('critic_activation', torch.relu),
             buffer_size=config.get('buffer_size', int(1e+6)),
