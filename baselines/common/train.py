@@ -3,7 +3,6 @@ import torch, numpy as np
 import ray, ray.exceptions
 from tqdm import tqdm
 from copy import deepcopy
-from ray.util.queue import Queue
 from baselines.common.wrapper import NormalizedEnv
 from baselines.common.plot import plot_train_result, plot_epoch_result
 from baselines.common.buffer import SharedRolloutBuffer, SharedReplayBuffer, SharedPrioritizedReplayBuffer
@@ -365,9 +364,6 @@ class DistributedTrainer:
             
         ray.init()    
         try:
-            lock_queue = Queue(maxsize=self.n_runners)
-            lock_queue.put("lock")
-
             self.buffer_size = self.learner.buffer_size
             self.reward_norm = self.learner.reward_norm
             self.epsilon = 1e-8
@@ -414,13 +410,12 @@ class DistributedTrainer:
                     max_iters=self.max_iters,
                     policy_type=self.policy_type,
                     load_path=path, 
-                    lock_queue=lock_queue,
                     normalized_env=self.normalized_env) 
                     for runner_name in range(self.n_runners)
                     ]
             
             runner_tasks = []
-            self._sync_with_runner(lock_queue, path)
+            self.learner.save(path)
             timesteps, num_eps, train_iters = 0, 0, 0
             eval_counter = 0
 
@@ -432,6 +427,7 @@ class DistributedTrainer:
                             buffer=buffer, 
                             runner_iters=runner_iters
                         ))
+                    time.sleep(0.1)
 
                 results = ray.get(runner_tasks)
                 runner_tasks.clear()
@@ -479,6 +475,8 @@ class DistributedTrainer:
                             
                             if result is not None:
                                 self.epoch_logger.append({'timesteps': timesteps + t, 'result': result})
+                    
+                    self.learner.save(path)
                 else:
                     print('\n================= LEARNER IS WAITING FOR TRAININGS ================\n')
                 
@@ -514,7 +512,6 @@ class DistributedTrainer:
                             print(f'MEAN EPISODE RETURN         | {round(mean_ep_ret, 4)}')            
                             print(f'----------------------------+-------------------------------------')
 
-                self._sync_with_runner(lock_queue, path)   
                 self.save_logs()              
                 
         except KeyboardInterrupt:        
@@ -559,24 +556,10 @@ class DistributedTrainer:
         with open(loggers_save_path, 'wb') as f:
             pickle.dump(data, f)
 
-    def _sync_with_runner(self, lock_queue, path, max_retries=5):
-        for _ in range(max_retries):
-            try:
-                lock_queue.get()
-                try:
-                    self.learner.save(path)
-                finally:
-                    lock_queue.put("lock")
-                break
-            except (RuntimeError, EOFError, OSError):
-                time.sleep(0.5)
-        else:
-            raise RuntimeError(f'LEARNER HAS FAILED TO SAVE THE FILE AFTER {max_retries} ATTEMPTS.')
-        
 
 @ray.remote(num_gpus=0.1)
 class Runner:
-    def __init__(self, name, env, learner, seed, max_iters, policy_type, load_path, lock_queue, normalized_env):
+    def __init__(self, name, env, learner, seed, max_iters, policy_type, load_path, normalized_env):
         self.name = name
         self.env = deepcopy(env)
         if normalized_env:
@@ -593,15 +576,14 @@ class Runner:
         self.max_iters = max_iters
         self.policy_type = policy_type
         self.load_path = load_path
-        self.lock_queue = lock_queue
 
         self.state = self.env.reset(seed=self.seed)
         self.ep_ret, self.ep_len = 0, 0
 
     def run(self, buffer, runner_iters):
-        self._sync_with_learner()
         ep_counter, timesteps = 0, 0
         total_ep_ret, total_ep_len = [], []
+        self.runner.load(self.load_path)
 
         start_time = time.time()
         while timesteps < runner_iters:
@@ -637,18 +619,3 @@ class Runner:
         elapse = [hours, minutes, seconds]
 
         return self.name, timesteps, ep_counter, total_ep_ret, total_ep_len, elapse
-    
-    def _sync_with_learner(self, max_retries=5):
-        for _ in range(max_retries):
-            try:
-                self.lock_queue.get()
-                try:
-                    self.runner.load(self.load_path)
-                finally:
-                    self.lock_queue.put("lock")
-                break
-            except (RuntimeError, EOFError, OSError):
-                time.sleep(0.5)
-        else:
-            raise RuntimeError(f'RUNNER {self.name} HAS FAILED TO LOAD THE CHECKPOINT AFTER {max_retries} ATTEMPTS.')
-

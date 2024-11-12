@@ -48,10 +48,15 @@ class DQN(OffPolicyAlgorithm):
         self.optim = Adam(self.policy.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, training=True):
+    def act(self, state, global_buffer_size=None, training=True):
         self.timesteps += 1
-        if (self.buffer.size < self.update_after) and training:
-            return self.random_action()
+
+        if global_buffer_size is None:
+            if (self.buffer.size < self.update_after) and training:
+                return self.random_action()
+        else:
+            if (global_buffer_size < self.update_after) and training:
+                return self.random_action()
 
         if self.eps_threshold > self.eps_min:
             self.eps_threshold *= self.eps_decay

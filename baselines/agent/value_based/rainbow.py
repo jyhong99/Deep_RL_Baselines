@@ -51,10 +51,15 @@ class RainbowDQN(OffPolicyAlgorithm):
         self.optim = Adam(self.policy.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, training=True):
-        self.timesteps += 1 
-        if (self.buffer.size < self.update_after) and training:
-            return self.random_action()
+    def act(self, state, global_buffer_size=None, training=True):
+        self.timesteps += 1
+
+        if global_buffer_size is None:
+            if (self.buffer.size < self.update_after) and training:
+                return self.random_action()
+        else:
+            if (global_buffer_size < self.update_after) and training:
+                return self.random_action()
         
         self.policy.train(training)
         state = torch.FloatTensor(state).to(self.device)
