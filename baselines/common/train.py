@@ -597,7 +597,7 @@ class Runner:
                     break
 
             timesteps += 1
-            action = self.runner.act(self.state, buffer_size)
+            action = self.runner.act(self.state, global_buffer_size=buffer_size)
             next_state, reward, terminated, _ =  get_next_step(self.env, action)
             buffer.store.remote(self.state, action, reward, next_state, terminated)
 
