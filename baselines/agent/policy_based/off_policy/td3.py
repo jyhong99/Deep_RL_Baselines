@@ -70,9 +70,7 @@ class TD3(OffPolicyAlgorithm):
                 )
         
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
-
+    def act(self, state, training=True, global_buffer_size=None):
         if global_buffer_size is None:
             if (self.buffer.size < self.update_after) and training:
                 return self.random_action()
@@ -88,9 +86,15 @@ class TD3(OffPolicyAlgorithm):
 
         return torch.clamp(action, -1., 1.).cpu().numpy()
     
-    def learn(self, states, actions, rewards, next_states, dones, weights=None):
+    def learn(self, 
+              states, actions, rewards, next_states, dones, 
+              weights=None, global_timesteps=None
+            ):
+        
         self.actor.train()
         self.critic.train()
+        if global_timesteps is not None:
+            self.timesteps = global_timesteps
 
         with torch.no_grad():
             target_noises = torch.clamp(self.target_noise_std * torch.randn_like(actions), -self.noise_clip, self.noise_clip)

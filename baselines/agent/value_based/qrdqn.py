@@ -51,9 +51,7 @@ class QRDQN(OffPolicyAlgorithm):
         self.optim = Adam(self.policy.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
-
+    def act(self, state, training=True, global_buffer_size=None):
         if global_buffer_size is None:
             if (self.buffer.size < self.update_after) and training:
                 return self.random_action()
@@ -72,8 +70,14 @@ class QRDQN(OffPolicyAlgorithm):
         action = self.policy(state).mean(dim=1).argmax(dim=1).reshape(-1)
         return action.item()
     
-    def learn(self, states, actions, rewards, next_states, dones, weights=None):
+    def learn(self, 
+              states, actions, rewards, next_states, dones, 
+              weights=None, global_timesteps=None
+            ):
+        
         self.policy.train()
+        if global_timesteps is not None:
+            self.timesteps = global_timesteps
 
         with torch.no_grad():
             next_quantiles = self.policy(next_states) if self.double_mode else self.target_policy(next_states)

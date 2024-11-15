@@ -59,8 +59,7 @@ class PPO(OnPolicyAlgorithm):
         self.optim = Adam(self.actor.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
+    def act(self, state, training=True, global_buffer_size=None):
         self.actor.train(training)
         state = torch.FloatTensor(state).to(self.device)
         mu, std = self.actor(state)
@@ -220,8 +219,7 @@ class PPO_Discrete(OnPolicyAlgorithm):
         self.optim = Adam(self.actor.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
+    def act(self, state, training=True, global_buffer_size=None):
         self.actor.train(training)
         state = torch.FloatTensor(state).to(self.device)
         logits = self.actor(state)

@@ -66,9 +66,7 @@ class SAC(OffPolicyAlgorithm):
             self.alpha_optim = Adam([self.log_alpha], lr=self.ent_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
-
+    def act(self, state, training=True, global_buffer_size=None):
         if global_buffer_size is None:
             if (self.buffer.size < self.update_after) and training:
                 return self.random_action()
@@ -87,9 +85,15 @@ class SAC(OffPolicyAlgorithm):
             action = torch.normal(mu, std) if training else mu
             return torch.tanh(action).cpu().numpy()
     
-    def learn(self, states, actions, rewards, next_states, dones, weights=None):
+    def learn(self, 
+              states, actions, rewards, next_states, dones, 
+              weights=None, global_timesteps=None
+            ):
+        
         self.actor.train()
         self.critic.train()
+        if global_timesteps is not None:
+            self.timesteps = global_timesteps
 
         if self.gsde_mode:
             self.actor.reset_noise()
@@ -250,9 +254,7 @@ class SAC_Discrete(OffPolicyAlgorithm):
             self.alpha_optim = Adam([self.log_alpha], lr=self.ent_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
-
+    def act(self, state, training=True, global_buffer_size=None):
         if global_buffer_size is None:
             if (self.buffer.size < self.update_after) and training:
                 return self.random_action()
@@ -277,9 +279,15 @@ class SAC_Discrete(OffPolicyAlgorithm):
                 actions = [torch.argmax(logit).item() for logit in logits]
             return actions
     
-    def learn(self, states, actions, rewards, next_states, dones, weights=None):
+    def learn(self, 
+              states, actions, rewards, next_states, dones, 
+              weights=None, global_timesteps=None
+            ):
+        
         self.actor.train()
         self.critic.train()
+        if global_timesteps is not None:
+            self.timesteps = global_timesteps
 
         with torch.no_grad():
             next_probs = self.actor.sample(next_states)

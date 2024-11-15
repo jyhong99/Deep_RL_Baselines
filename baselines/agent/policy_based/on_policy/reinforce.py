@@ -45,8 +45,7 @@ class REINFORCE(OnPolicyAlgorithm):
         self.optim = Adam(self.policy.parameters(), lr=self.actor_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
+    def act(self, state, training=True, global_buffer_size=None):
         self.policy.train(training)
         state = torch.FloatTensor(state).to(self.device)
         mu, std = self.actor(state)
@@ -150,8 +149,7 @@ class BaselineREINFORCE(OnPolicyAlgorithm):
         self.critic_optim = Adam(self.critic.parameters(), lr=self.critic_lr)
 
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
+    def act(self, state, training=True, global_buffer_size=None):
         self.actor.train(training)
         state = torch.FloatTensor(state).to(self.device)
         mu, std = self.actor(state)

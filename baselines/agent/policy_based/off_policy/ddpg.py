@@ -66,9 +66,7 @@ class DDPG(OffPolicyAlgorithm):
                 )
     
     @torch.no_grad()
-    def act(self, state, global_buffer_size=None, training=True):
-        self.timesteps += 1
-
+    def act(self, state, training=True, global_buffer_size=None):
         if global_buffer_size is None:
             if (self.buffer.size < self.update_after) and training:
                 return self.random_action()
@@ -84,9 +82,15 @@ class DDPG(OffPolicyAlgorithm):
 
         return torch.clamp(action, -1., 1.).cpu().numpy()
 
-    def learn(self, states, actions, rewards, next_states, dones, weights=None):
+    def learn(self, 
+              states, actions, rewards, next_states, dones, 
+              weights=None, global_timesteps=None
+            ):
+        
         self.actor.train()
         self.critic.train()
+        if global_timesteps is not None:
+            self.timesteps = global_timesteps
 
         with torch.no_grad():
             next_q_values = self.target_critic(next_states, self.target_actor(next_states))

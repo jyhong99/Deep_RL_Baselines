@@ -134,7 +134,9 @@ class OnPolicyAlgorithm:
                 )
 
     def step(self, state, action, reward, next_state, done):
+        self.timesteps += 1
         result = None
+        
         self.buffer.store(state, action, reward, next_state, done)
         if self.buffer.size >= self.update_after:
             states, actions, rewards, next_states, dones = self.buffer.sample() 
@@ -293,7 +295,9 @@ class OffPolicyAlgorithm:
                 )
             
     def step(self, state, action, reward, next_state, done):
+        self.timesteps += 1
         result = None
+
         self.buffer.store(state, action, reward, next_state, done)
         if self.prioritized_mode:
             fraction = min(self.timesteps / self.max_iters, 1.)

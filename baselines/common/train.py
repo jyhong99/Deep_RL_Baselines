@@ -463,7 +463,7 @@ class DistributedTrainer:
                                 self.prio_beta = self.prio_beta + fraction * (1. - self.prio_beta)
 
                                 states, actions, rewards, next_states, dones, weights, idxs = ray.get(buffer.sample.remote(self.prio_beta))
-                                result = self.learner.learn(states, actions, rewards, next_states, dones, weights)
+                                result = self.learner.learn(states, actions, rewards, next_states, dones, weights, timesteps + t)
 
                                 if result['td_error'] is not None:
                                     td_error = result['td_error'].detach().cpu().abs().numpy().flatten()
@@ -471,7 +471,8 @@ class DistributedTrainer:
                                     buffer.update_priorities.remote(idxs, new_prios)
                             else:
                                 states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote())
-                                result = self.learner.learn(states, actions, rewards, next_states, dones)
+                                result = self.learner.learn(states, actions, rewards, next_states, dones, 
+                                                            weights=None, global_timesteps=timesteps + t)
                             
                             if result is not None:
                                 self.epoch_logger.append({'timesteps': timesteps + t, 'result': result})
