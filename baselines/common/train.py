@@ -460,12 +460,14 @@ class DistributedTrainer:
                     total_ep_ret += ep_ret
                     total_ep_len += ep_len
 
-                    print(f"RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}, ELAPSE: {elapse[1]}m {elapse[2]}s")
+                    if self.show_stats:
+                        print(f"RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}, ELAPSED: {elapse[1]}m {elapse[2]}s")
 
                 eval_counter += train_iters
                 buffer_size = ray.get(self.buffer.size.remote())
                 if buffer_size >= self.learner.update_after:
-                    print('\n===================== LEARNER STARTS TRAININGS ====================\n') 
+                    if self.show_stats:
+                        print('\n===================== LEARNER STARTS TRAININGS ====================\n') 
                     result = None
                     if self.policy_type == 'on_policy':
                         states, actions, rewards, next_states, dones = ray.get(self.buffer.sample.remote())
@@ -475,7 +477,12 @@ class DistributedTrainer:
                             self.epoch_logger.append({'timesteps': timesteps, 'result': result})
 
                     elif self.policy_type == 'off_policy':
-                        for t in tqdm(range(1, train_iters+1), desc=f'TRAINING'):
+                        if self.show_stats:
+                            iterator = tqdm(range(1, train_iters + 1), desc='TRAINING')
+                        else:
+                            iterator = range(1, train_iters + 1)
+
+                        for t in iterator:
                             if self.prioritized_mode:
                                 fraction = min((timesteps + t) / max_iters, 1.)
                                 self.prio_beta = self.prio_beta + fraction * (1. - self.prio_beta)
@@ -498,7 +505,8 @@ class DistributedTrainer:
                     self.learner.save(model_path)
                     self.buffer.save.remote(buffer_path)
                 else:
-                    print('\n================= LEARNER IS WAITING FOR TRAININGS ================\n')
+                    if self.show_stats:
+                        print('\n================= LEARNER IS WAITING FOR TRAININGS ================\n')
                 
                 timesteps += train_iters     
                 if eval_counter >= self.eval_intervals:
@@ -531,6 +539,24 @@ class DistributedTrainer:
                             print(f'MEAN EPISODE LENGTH         | {round(mean_ep_len, 4)}')
                             print(f'MEAN EPISODE RETURN         | {round(mean_ep_ret, 4)}')            
                             print(f'----------------------------+-------------------------------------')
+                
+                if not self.show_stats:
+                    elapsed_seconds = time.time() - self.start_time
+                    elapsed_time = datetime.timedelta(seconds=elapsed_seconds)
+                    total_seconds = int(elapsed_time.total_seconds())
+                    hours, remainder = divmod(total_seconds, 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    time_elapsed_str = f"{hours}h {minutes}m {seconds}s"
+
+                    estimated_total_time = (elapsed_seconds / timesteps) * self.max_iters
+                    remaining_seconds = estimated_total_time - elapsed_seconds
+                    remaining_hours, remaining_remainder = divmod(remaining_seconds, 3600)
+                    remaining_minutes, remaining_seconds = divmod(remaining_remainder, 60)
+                    remaining_time_str = f"{int(remaining_hours)}h {int(remaining_minutes)}m {int(remaining_seconds)}s"
+
+                    progress = 100 * timesteps / self.max_iters
+                    progress_str = f"{timesteps} / {self.max_iters} ({round(progress, 2)}%)"
+                    print(f"PROGRESS: {progress_str}, ELAPSED: {time_elapsed_str}, REMAINING: {remaining_time_str}")
 
                 self.save_logs()  
 
