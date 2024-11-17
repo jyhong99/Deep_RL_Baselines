@@ -1,4 +1,4 @@
-import ray, torch, random, numpy as np
+import ray, torch, random, pickle, numpy as np
 from baselines.common.operation import MinSegmentTree, SumSegmentTree
 
 
@@ -42,15 +42,25 @@ class BaseBuffer:
         self.dones = np.zeros((self.buffer_size, 1), dtype=np.float32)
         self.ptr, self.is_full = 0, False
 
+    def save(self, save_path):
+        with open(save_path, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def load(cls, load_path):
+        with open(load_path, 'rb') as f:
+            buffer = pickle.load(f)
+        return buffer
+    
+    @property
+    def size(self):
+        return self.buffer_size if self.is_full else self.ptr
+    
     def _normalize_elements(self, elements):
         mean = elements.mean()
         std = elements.std() + self.epsilon
         normalized_elements = (elements - mean) / std
         return normalized_elements
-    
-    @property
-    def size(self):
-        return self.buffer_size if self.is_full else self.ptr
 
 
 
@@ -190,7 +200,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 @ray.remote(num_gpus=0.1)
-class SharedRolloutBuffer:
+class SharedRolloutBuffer(object):
     def __init__(self, state_dim, action_dim, buffer_size, device, reward_norm, epsilon):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -233,6 +243,16 @@ class SharedRolloutBuffer:
         self.dones = np.zeros((self.buffer_size, 1), dtype=np.float32)
         self.ptr, self.is_full = 0, False
 
+    def save(self, save_path):
+        with open(save_path, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def load(cls, load_path):
+        with open(load_path, 'rb') as f:
+            buffer = pickle.load(f)
+        return buffer
+    
     def size(self):
         return self.buffer_size if self.is_full else self.ptr
     
@@ -246,7 +266,7 @@ class SharedRolloutBuffer:
     
 
 @ray.remote(num_gpus=0.1)
-class SharedReplayBuffer:
+class SharedReplayBuffer(object):
     def __init__(self, state_dim, action_dim, buffer_size, batch_size, device, alpha=0.6, reward_norm=False, epsilon=1e-8):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -290,6 +310,16 @@ class SharedReplayBuffer:
         self.dones = np.zeros((self.buffer_size, 1), dtype=np.float32)
         self.ptr, self.is_full = 0, False
 
+    def save(self, save_path):
+        with open(save_path, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def load(cls, load_path):
+        with open(load_path, 'rb') as f:
+            buffer = pickle.load(f)
+        return buffer
+    
     def size(self):
         return self.buffer_size if self.is_full else self.ptr
     
@@ -303,7 +333,7 @@ class SharedReplayBuffer:
 
 
 @ray.remote(num_gpus=0.1)
-class SharedPrioritizedReplayBuffer(ReplayBuffer):    
+class SharedPrioritizedReplayBuffer(object):  
     def __init__(self, state_dim, action_dim, buffer_size, batch_size, device, alpha, reward_norm, epsilon):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -368,6 +398,16 @@ class SharedPrioritizedReplayBuffer(ReplayBuffer):
             self.sum_tree[idx] = prio ** self.alpha
             self.min_tree[idx] = prio ** self.alpha
             self.max_prio = max(self.max_prio, prio)
+
+    def save(self, save_path):
+        with open(save_path, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def load(cls, load_path):
+        with open(load_path, 'rb') as f:
+            buffer = pickle.load(f)
+        return buffer
 
     def size(self):
         return self.buffer_size if self.is_full else self.ptr

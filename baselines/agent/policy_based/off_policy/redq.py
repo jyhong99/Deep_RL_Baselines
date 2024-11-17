@@ -173,7 +173,7 @@ class REDQ(OffPolicyAlgorithm):
         }
                 
         return result
-    
+
     def save(self, save_path):
         torch.save({
             'actor_state_dict': self.actor.state_dict(),
@@ -182,6 +182,16 @@ class REDQ(OffPolicyAlgorithm):
             'actor_optim_state_dict': self.actor_optim.state_dict(),
             'critic_optims_state_dict': [critic_optim.state_dict() for critic_optim in self.critic_optims]
         }, save_path)
+
+        if self.adaptive_alpha_mode:
+            torch.save({
+                'actor_state_dict': self.actor.state_dict(),
+                'critics_state_dict': [critic.state_dict() for critic in self.critics],
+                'target_critics_state_dict': [target_critic.state_dict() for target_critic in self.target_critics],
+                'actor_optim_state_dict': self.actor_optim.state_dict(),
+                'critic_optims_state_dict': [critic_optim.state_dict() for critic_optim in self.critic_optims],
+                'alpha_optim_state_dict': self.alpha_optim.state_dict()
+            }, save_path)   
 
     def load(self, load_path):
         checkpoint = torch.load(load_path, weights_only=True)
@@ -196,3 +206,6 @@ class REDQ(OffPolicyAlgorithm):
         self.actor_optim.load_state_dict(checkpoint['actor_optim_state_dict'])
         for critic_optim, state_dict in zip(self.critic_optims, checkpoint['critic_optims_state_dict']):
             critic_optim.load_state_dict(state_dict)
+
+        if self.adaptive_alpha_mode:
+            self.alpha_optim.load_state_dict(checkpoint['alpha_optim_state_dict'])

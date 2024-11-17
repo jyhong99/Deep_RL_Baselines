@@ -169,6 +169,16 @@ class SAC(OffPolicyAlgorithm):
             'actor_optim_state_dict': self.actor_optim.state_dict(),
             'critic_optim_state_dict': self.critic_optim.state_dict()
         }, save_path)
+        
+        if self.adaptive_alpha_mode:
+            torch.save({
+                'actor_state_dict': self.actor.state_dict(),
+                'critic_state_dict': self.critic.state_dict(),
+                'target_critic_state_dict': self.target_critic.state_dict(),
+                'actor_optim_state_dict': self.actor_optim.state_dict(),
+                'critic_optim_state_dict': self.critic_optim.state_dict(),
+                'alpha_optim_state_dict': self.alpha_optim.state_dict()
+            }, save_path)            
 
     def load(self, load_path):
         checkpoint = torch.load(load_path, weights_only=True)
@@ -177,6 +187,9 @@ class SAC(OffPolicyAlgorithm):
         self.target_critic.load_state_dict(checkpoint['target_critic_state_dict'])
         self.actor_optim.load_state_dict(checkpoint['actor_optim_state_dict'])
         self.critic_optim.load_state_dict(checkpoint['critic_optim_state_dict'])
+
+        if self.adaptive_alpha_mode:
+            self.alpha_optim.load_state_dict(checkpoint['alpha_optim_state_dict'])
 
 
 
@@ -369,6 +382,16 @@ class SAC_Discrete(OffPolicyAlgorithm):
             'actor_optim_state_dict': self.actor_optim.state_dict(),
             'critic_optim_state_dict': self.critic_optim.state_dict()
         }, save_path)
+        
+        if self.adaptive_alpha_mode:
+            torch.save({
+                'actor_state_dict': self.actor.state_dict(),
+                'critic_state_dict': self.critic.state_dict(),
+                'target_critic_state_dict': self.target_critic.state_dict(),
+                'actor_optim_state_dict': self.actor_optim.state_dict(),
+                'critic_optim_state_dict': self.critic_optim.state_dict(),
+                'alpha_optim_state_dict': self.alpha_optim.state_dict()
+            }, save_path)            
 
     def load(self, load_path):
         checkpoint = torch.load(load_path, weights_only=True)
@@ -377,3 +400,6 @@ class SAC_Discrete(OffPolicyAlgorithm):
         self.target_critic.load_state_dict(checkpoint['target_critic_state_dict'])
         self.actor_optim.load_state_dict(checkpoint['actor_optim_state_dict'])
         self.critic_optim.load_state_dict(checkpoint['critic_optim_state_dict'])
+
+        if self.adaptive_alpha_mode:
+            self.alpha_optim.load_state_dict(checkpoint['alpha_optim_state_dict'])
