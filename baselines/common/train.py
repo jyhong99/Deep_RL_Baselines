@@ -606,7 +606,7 @@ class DistributedTrainer:
             pickle.dump(data, f)
 
 
-@ray.remote(num_gpus=0.1)
+@ray.remote(num_gpus=0.06)
 class Runner:
     def __init__(self, name, env, learner, seed, max_iters, policy_type, load_path, normalized_env):
         self.name = name
