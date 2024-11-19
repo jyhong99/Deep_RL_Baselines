@@ -132,10 +132,15 @@ class Trainer:
         buffer_path = os.path.join(path, 'buffer.pkl')
         if load_path:
             pt_file_load_path = os.path.join(load_path, 'model.pth')
-            bf_file_load_path = os.path.join(load_path, 'buffer.pkl')
             self.agent.load(pt_file_load_path)
-            self.agent.buffer.load(bf_file_load_path)
-            print(f"LEARNER HAS BEEN LOADED FROM: {load_path}")
+            print(f"AGENT HAS BEEN LOADED FROM: {pt_file_load_path}")
+
+            bf_file_load_path = os.path.join(load_path, 'buffer.pkl')
+            if os.path.exists(bf_file_load_path):
+                self.agent.buffer.load(bf_file_load_path)
+                print(f"BUFFER HAS BEEN LOADED FROM: {bf_file_load_path}")
+            else:
+                print(f"BUFFER HAS BEEN FAILED TO BE LOADED.")
 
         if normalized_env:
             self.train_env = NormalizedEnv(
@@ -376,7 +381,7 @@ class DistributedTrainer:
             self.epsilon = 1e-8
         
             if self.policy_type == 'on_policy':
-                self.buffer = SharedRolloutBuffer.remote(
+                buffer = SharedRolloutBuffer.remote(
                     state_dim=self.state_dim, 
                     action_dim=self.action_dim, 
                     buffer_size=self.buffer_size, 
@@ -387,7 +392,7 @@ class DistributedTrainer:
                 
             elif self.policy_type == 'off_policy':
                 if self.prioritized_mode:
-                    self.buffer = SharedPrioritizedReplayBuffer.remote(
+                    buffer = SharedPrioritizedReplayBuffer.remote(
                         state_dim=self.state_dim, 
                         action_dim=self.action_dim, 
                         buffer_size=self.buffer_size, 
@@ -398,7 +403,7 @@ class DistributedTrainer:
                         epsilon=self.epsilon
                         )
                 else:
-                    self.buffer = SharedReplayBuffer.remote(
+                    buffer = SharedReplayBuffer.remote(
                         state_dim=self.state_dim, 
                         action_dim=self.action_dim, 
                         buffer_size=self.buffer_size, 
@@ -414,10 +419,15 @@ class DistributedTrainer:
             buffer_path = os.path.join(path, 'buffer.pkl')
             if load_path:
                 pt_file_load_path = os.path.join(load_path, 'model.pth')
-                bf_file_load_path = os.path.join(load_path, 'buffer.pkl')
                 self.learner.load(pt_file_load_path)
-                self.buffer.load.remote(bf_file_load_path)
-                print(f"LEARNER HAS BEEN LOADED FROM: {load_path}")
+                print(f"LEARNER HAS BEEN LOADED FROM: {pt_file_load_path}")
+
+                bf_file_load_path = os.path.join(load_path, 'buffer.pkl')
+                if os.path.exists(bf_file_load_path):
+                    buffer.load.remote(bf_file_load_path)
+                    print(f"BUFFER HAS BEEN LOADED FROM: {bf_file_load_path}")
+                else:
+                    print(f"BUFFER HAS BEEN FAILED TO BE LOADED.")
 
             runners = [
                 Runner.remote(
@@ -442,7 +452,7 @@ class DistributedTrainer:
                 for runner in runners:
                     runner_tasks.append(
                         runner.run.remote(
-                            buffer=self.buffer, 
+                            buffer=buffer, 
                             runner_iters=runner_iters
                         ))
                     time.sleep(0.1)
@@ -464,13 +474,13 @@ class DistributedTrainer:
                         print(f"RUNNER {name} | TOTAL EPISODES: {ep_per_run}, TOTAL TIMESTEPS: {time_per_run}, ELAPSED: {elapse[1]}m {elapse[2]}s")
 
                 eval_counter += train_iters
-                buffer_size = ray.get(self.buffer.size.remote())
+                buffer_size = ray.get(buffer.size.remote())
                 if buffer_size >= self.learner.update_after:
                     if self.show_stats:
                         print('\n===================== LEARNER STARTS TRAININGS ====================\n') 
                     result = None
                     if self.policy_type == 'on_policy':
-                        states, actions, rewards, next_states, dones = ray.get(self.buffer.sample.remote())
+                        states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote())
                         result = self.learner.learn(states, actions, rewards, next_states, dones)
 
                         if result is not None:
@@ -487,15 +497,15 @@ class DistributedTrainer:
                                 fraction = min((timesteps + t) / max_iters, 1.)
                                 self.prio_beta = self.prio_beta + fraction * (1. - self.prio_beta)
 
-                                states, actions, rewards, next_states, dones, weights, idxs = ray.get(self.buffer.sample.remote(self.prio_beta))
+                                states, actions, rewards, next_states, dones, weights, idxs = ray.get(buffer.sample.remote(self.prio_beta))
                                 result = self.learner.learn(states, actions, rewards, next_states, dones, weights, timesteps + t)
 
                                 if result['td_error'] is not None:
                                     td_error = result['td_error'].detach().cpu().abs().numpy().flatten()
                                     new_prios = td_error + self.prio_eps
-                                    self.buffer.update_priorities.remote(idxs, new_prios)
+                                    buffer.update_priorities.remote(idxs, new_prios)
                             else:
-                                states, actions, rewards, next_states, dones = ray.get(self.buffer.sample.remote())
+                                states, actions, rewards, next_states, dones = ray.get(buffer.sample.remote())
                                 result = self.learner.learn(states, actions, rewards, next_states, dones, 
                                                             weights=None, global_timesteps=timesteps + t)
                             
@@ -503,7 +513,7 @@ class DistributedTrainer:
                                 self.epoch_logger.append({'timesteps': timesteps + t, 'result': result})
                     
                     self.learner.save(model_path)
-                    self.buffer.save.remote(buffer_path)
+                    buffer.save.remote(buffer_path)
                 else:
                     if self.show_stats:
                         print('\n================= LEARNER IS WAITING FOR TRAININGS ================\n')
@@ -567,7 +577,8 @@ class DistributedTrainer:
             self.train_env.close()
             self.eval_env.close()
             self.learner.save(model_path)
-            self.buffer.save.remote(buffer_path)
+            buffer.save.remote(buffer_path)
+            ray.shutdown()
 
             self.end_time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.elapsed_time = datetime.timedelta(seconds=(time.time() - self.start_time))
@@ -591,8 +602,6 @@ class DistributedTrainer:
             self.save_logs()
             plot_train_result(project_name, self.epoch_logger, window=20, show_graphs=self.show_graphs)
             plot_epoch_result(project_name, self.epoch_logger, window=20, show_graphs=self.show_graphs)
-            
-            ray.shutdown()
 
     def get_logger(self):
         return self.train_logger, self.epoch_logger
