@@ -136,11 +136,7 @@ class SAC(OffPolicyAlgorithm):
 
             alpha_loss = torch.tensor(0.)
             if self.adaptive_alpha_mode:
-                if self.prioritized_mode:
-                    alpha_loss = -(weights * self.log_alpha * (log_probs + self.target_entropy).detach()).mean()
-                else:
-                    alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()      
-
+                alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()      
                 self.alpha_optim.zero_grad()
                 alpha_loss.backward()
                 self.alpha_optim.step()
